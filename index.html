@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Forbidden Lands v0.18</title>
+    <title>Forbidden Lands RPG Map</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
         body, html {
@@ -97,11 +97,10 @@
         const brushSize = document.getElementById('brush-size');
         const brushSizeDisplay = document.getElementById('brush-size-display');
         const cursor = document.getElementById('cursor');
-        const saveMapBtn = document.getElementById('save-map');
-        const clearMapBtn = document.getElementById('clear-map');
 
         // State
         let isGMMode = false, isDrawing = false, currentTool = 'reveal';
+        let lastDrawTime = 0, drawThrottle = 10;
 
         // Initialize fog
         function initializeFog() {
@@ -127,21 +126,20 @@
         loadSavedState();
 
         // Brush size calculations
-        function getScaledBrushSize() {
+        function getScaledRevealSize() {
             const zoom = map.getZoom();
-            const baseSize = parseInt(brushSize.value);
-            return baseSize / map.getZoomScale(zoom); // Corrects for zoom level
+            return parseInt(brushSize.value) / map.getZoomScale(zoom);
         }
 
         function updateBrushSize() {
             brushSizeDisplay.textContent = brushSize.value;
-            const size = parseInt(brushSize.value) * map.getZoomScale(map.getZoom());
+            const size = getScaledRevealSize() * map.getZoomScale(map.getZoom());
             cursor.style.width = size + 'px';
             cursor.style.height = size + 'px';
         }
 
         function updateCursor(e) {
-            const size = parseInt(brushSize.value) * map.getZoomScale(map.getZoom());
+            const size = getScaledRevealSize() * map.getZoomScale(map.getZoom());
             cursor.style.left = (e.clientX - size / 2) + 'px';
             cursor.style.top = (e.clientY - size / 2) + 'px';
         }
@@ -149,18 +147,26 @@
         function draw(e) {
             if (!isGMMode) return;
 
+            const currentTime = performance.now();
+            if (currentTime - lastDrawTime < drawThrottle) return;
+            lastDrawTime = currentTime;
+
             const point = map.mouseEventToLatLng(e);
             const x = (point.lng / mapWidth) * canvas.width;
             const y = canvas.height - (point.lat / mapHeight) * canvas.height;
 
-            const scaledSize = getScaledBrushSize() * canvas.width / map.getContainer().clientWidth;
+            const scaledSize = getScaledRevealSize() * canvas.width / map.getContainer().clientWidth;
 
             ctx.beginPath();
             ctx.arc(x, y, scaledSize, 0, Math.PI * 2);
-            ctx.globalCompositeOperation = currentTool === 'reveal' ? 'destination-out' : 'source-over';
-            ctx.fillStyle = 'black';
-            ctx.fill();
 
+            if (currentTool === 'reveal') {
+                ctx.globalCompositeOperation = 'destination-out';
+            } else {
+                ctx.globalCompositeOperation = 'source-over';
+            }
+
+            ctx.fill();
             requestAnimationFrame(updateCanvasLayer);
         }
 
@@ -203,12 +209,12 @@
 
         brushSize.addEventListener('input', updateBrushSize);
 
-        saveMapBtn.addEventListener('click', () => {
+        document.getElementById('save-map').addEventListener('click', () => {
             localStorage.setItem('rpgMapState', canvas.toDataURL());
             alert('Map saved!');
         });
 
-        clearMapBtn.addEventListener('click', () => {
+        document.getElementById('clear-map').addEventListener('click', () => {
             if (confirm('Clear all revealed areas?')) {
                 initializeFog();
                 localStorage.removeItem('rpgMapState');
