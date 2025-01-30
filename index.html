@@ -1,13 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
-<!-- Previous head section remains the same -->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Forbidden Lands RPG Map v0.14</title>
+    <title>Forbidden Lands RPG Map</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
-        /* Previous styles remain the same */
         body, html {
             margin: 0;
             padding: 0;
@@ -97,7 +95,6 @@
 
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
-        // Previous initialization code remains similar
         const mapWidth = 8563;
         const mapHeight = 6201;
         const mapBounds = [[0, 0], [mapHeight, mapWidth]];
@@ -121,7 +118,7 @@
         canvas.height = mapHeight;
         const ctx = canvas.getContext('2d', { 
             willReadFrequently: true,
-            alpha: false  // Optimization for non-transparent canvas
+            alpha: false
         });
 
         const canvasLayer = L.imageOverlay(canvas, mapBounds).addTo(map);
@@ -191,13 +188,17 @@
             map.doubleClickZoom.enable();
             map.scrollWheelZoom.enable();
             state.isDrawing = false;
+            
+            // Remove active state from tool buttons
+            elements.revealToggle.classList.remove('active');
+            elements.eraseToggle.classList.remove('active');
         }
 
         // Improved brush size calculations
         function getScaledBrushSize() {
             const zoom = map.getZoom();
             const baseSize = parseInt(elements.brushSize.value);
-            return baseSize / Math.pow(2, zoom + 1); // Adjusted scaling factor
+            return baseSize / Math.pow(2, zoom + 1);
         }
 
         function updateBrushSize() {
@@ -214,23 +215,23 @@
             elements.cursor.style.top = (e.clientY - size/2) + 'px';
         }
 
-        // Optimized drawing with line interpolation
+        // Fixed drawing function
         function drawPoint(point) {
-            const x = (point.lng / mapWidth) * canvas.width;
-            const y = canvas.height - (point.lat / mapHeight) * canvas.height;
-            const scaledSize = getScaledBrushSize() * canvas.width / map.getContainer().clientWidth;
+            // Convert lat/lng to pixel coordinates directly using map methods
+            const layerPoint = map.latLngToContainerPoint(point);
+            const { x: canvasX, y: canvasY } = map.latLngToLayerPoint(point);
+            const scaledSize = getScaledBrushSize();
 
             if (state.lastPoint) {
-                const lastX = (state.lastPoint.lng / mapWidth) * canvas.width;
-                const lastY = canvas.height - (state.lastPoint.lat / mapHeight) * canvas.height;
+                const lastLayerPoint = map.latLngToLayerPoint(state.lastPoint);
                 
                 // Interpolate points for smooth lines
-                const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
+                const distance = Math.sqrt(Math.pow(canvasX - lastLayerPoint.x, 2) + Math.pow(canvasY - lastLayerPoint.y, 2));
                 const steps = Math.ceil(distance / (scaledSize / 4));
                 
                 for (let i = 0; i <= steps; i++) {
-                    const px = lastX + (x - lastX) * (i / steps);
-                    const py = lastY + (y - lastY) * (i / steps);
+                    const px = lastLayerPoint.x + (canvasX - lastLayerPoint.x) * (i / steps);
+                    const py = lastLayerPoint.y + (canvasY - lastLayerPoint.y) * (i / steps);
                     
                     ctx.beginPath();
                     ctx.arc(px, py, scaledSize, 0, Math.PI * 2);
@@ -238,7 +239,7 @@
                 }
             } else {
                 ctx.beginPath();
-                ctx.arc(x, y, scaledSize, 0, Math.PI * 2);
+                ctx.arc(canvasX, canvasY, scaledSize, 0, Math.PI * 2);
                 ctx.fill();
             }
 
@@ -304,7 +305,7 @@
             }
         });
 
-        // UI event listeners
+        // UI event listeners with updated toggle behavior
         elements.gmToggle.addEventListener('click', () => {
             state.isGMMode = !state.isGMMode;
             elements.gmToggle.textContent = 'GM Mode: ' + (state.isGMMode ? 'ON' : 'OFF');
@@ -316,17 +317,29 @@
         });
 
         elements.revealToggle.addEventListener('click', () => {
-            state.currentTool = 'reveal';
-            elements.revealToggle.classList.add('active');
-            elements.eraseToggle.classList.remove('active');
-            enableDrawingMode();
+            if (state.currentTool === 'reveal' && state.isDrawingMode) {
+                // If already in reveal mode and drawing, disable drawing
+                disableDrawingMode();
+            } else {
+                // Enable reveal mode and drawing
+                state.currentTool = 'reveal';
+                elements.revealToggle.classList.add('active');
+                elements.eraseToggle.classList.remove('active');
+                enableDrawingMode();
+            }
         });
 
         elements.eraseToggle.addEventListener('click', () => {
-            state.currentTool = 'erase';
-            elements.eraseToggle.classList.add('active');
-            elements.revealToggle.classList.remove('active');
-            enableDrawingMode();
+            if (state.currentTool === 'erase' && state.isDrawingMode) {
+                // If already in erase mode and drawing, disable drawing
+                disableDrawingMode();
+            } else {
+                // Enable erase mode and drawing
+                state.currentTool = 'erase';
+                elements.eraseToggle.classList.add('active');
+                elements.revealToggle.classList.remove('active');
+                enableDrawingMode();
+            }
         });
 
         elements.brushSize.addEventListener('input', updateBrushSize);
@@ -349,7 +362,6 @@
 
         // Initial setup
         updateBrushSize();
-        elements.revealToggle.classList.add('active');
     </script>
 </body>
 </html>
