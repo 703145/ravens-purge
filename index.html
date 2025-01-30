@@ -103,8 +103,14 @@
         canvas.width = mapWidth;
         canvas.height = mapHeight;
         const ctx = canvas.getContext('2d');
-        ctx.fillStyle = 'black';
-        ctx.fillRect(0, 0, mapWidth, mapHeight);
+
+        // Initialize with black (fog)
+        function initializeFog() {
+            ctx.fillStyle = 'black';
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillRect(0, 0, mapWidth, mapHeight);
+        }
+        initializeFog();
 
         const canvasLayer = L.imageOverlay(canvas, mapBounds).addTo(map);
 
@@ -150,22 +156,26 @@
         }
 
         function draw(e) {
-            if (!isDrawing || !isGMMode) return;
-            
+            if (!isGMMode) return;
+
             const point = map.mouseEventToLatLng(e);
-            const pixelPoint = map.latLngToContainerPoint(point);
-            const bounds = map.getBounds();
-            const topLeft = map.latLngToContainerPoint(bounds.getNorthWest());
             
-            const x = (point.lng / mapWidth) * canvas.width;
-            const y = (point.lat / mapHeight) * canvas.height;
+            // Convert lat/lng to pixel coordinates
+            const scale = canvas.width / mapWidth;
+            const x = point.lng * scale;
+            const y = point.lat * scale;
             
             ctx.beginPath();
             ctx.arc(x, y, brushSize.value/2, 0, Math.PI * 2);
-            ctx.fillStyle = currentTool === 'reveal' ? 'transparent' : 'black';
-            ctx.globalCompositeOperation = currentTool === 'reveal' ? 'destination-out' : 'source-over';
-            ctx.fill();
             
+            if (currentTool === 'reveal') {
+                ctx.globalCompositeOperation = 'destination-out';
+            } else {
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.fillStyle = 'black';
+            }
+            
+            ctx.fill();
             updateCanvasLayer();
         }
 
@@ -177,16 +187,24 @@
         map.on('mousemove', (e) => {
             if (isGMMode) {
                 updateCursor(e.originalEvent);
-                draw(e.originalEvent);
+                if (isDrawing) {
+                    draw(e.originalEvent);
+                }
             }
         });
 
-        map.on('mousedown', () => isDrawing = true);
+        map.on('mousedown', (e) => {
+            isDrawing = true;
+            draw(e.originalEvent);
+        });
+        
         map.on('mouseup', () => isDrawing = false);
+        
         map.on('mouseout', () => {
             isDrawing = false;
             cursor.style.display = 'none';
         });
+        
         map.on('mouseover', () => {
             if (isGMMode) cursor.style.display = 'block';
         });
@@ -196,6 +214,12 @@
             gmToggle.textContent = 'GM Mode: ' + (isGMMode ? 'ON' : 'OFF');
             gmToggle.classList.toggle('active');
             cursor.style.display = isGMMode ? 'block' : 'none';
+            
+            // When GM mode is turned off, ensure the fog is visible
+            if (!isGMMode && !savedMap) {
+                initializeFog();
+                updateCanvasLayer();
+            }
         });
 
         revealToggle.addEventListener('click', () => {
@@ -219,9 +243,9 @@
 
         clearMapBtn.addEventListener('click', () => {
             if (confirm('Are you sure you want to clear all revealed areas?')) {
-                ctx.fillStyle = 'black';
-                ctx.fillRect(0, 0, mapWidth, mapHeight);
+                initializeFog();
                 updateCanvasLayer();
+                localStorage.removeItem('rpgMapState');
             }
         });
 
