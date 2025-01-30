@@ -49,6 +49,11 @@
     <!-- Leaflet Draw Plugin -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
     <script>
+        // Define the map bounds (based on your image dimensions)
+        var mapWidth = 8563; // Width of your map image
+        var mapHeight = 6201; // Height of your map image
+        var mapBounds = [[0, 0], [mapHeight, mapWidth]]; // Height first, then width
+
         // Initialize the map with L.CRS.Simple
         var map = L.map('map', {
             crs: L.CRS.Simple, // Use simple coordinate system
@@ -62,11 +67,6 @@
 
         // ChatGPT: Prevents Leaflet from absorbing all clicks.
         map.getContainer().style.pointerEvents = 'auto';
-
-        // Define the map bounds (based on your image dimensions)
-        var mapWidth = 8563; // Width of your map image
-        var mapHeight = 6201; // Height of your map image
-        var mapBounds = [[0, 0], [mapHeight, mapWidth]]; // Height first, then width
 
         // Load your custom RPG map
         var mapImage = L.imageOverlay('assets/ravenland-map.jpg', mapBounds).addTo(map);
@@ -141,6 +141,10 @@
         // GM toggle button
         var gmMode = false;
         var gmToggle = document.getElementById('gm-toggle');
+        gmToggle.addEventListener('click', function(event) {
+            event.stopPropagation(); // Prevent Leaflet from blocking the click
+        });
+
         gmToggle.addEventListener('click', function() {
             gmMode = !gmMode;
             gmToggle.textContent = 'GM Mode: ' + (gmMode ? 'ON' : 'OFF');
