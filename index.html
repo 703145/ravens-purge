@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Forbidden Lands deep v0.21</title>
+    <title>Forbidden Lands deep v0.22</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
         /* Previous styles remain the same */
@@ -151,19 +151,19 @@
         function getScaledBrushSize() {
             const baseSize = parseInt(brushSize.value);
             const zoomScale = map.getZoomScale(map.getZoom());
-            return baseSize / zoomScale; // Correct scaling
+            return baseSize * zoomScale; // Scale the brush size based on the zoom level
         }
 
         function updateBrushSize() {
-            const size = brushSize.value;
+            const size = parseInt(brushSize.value);
             brushSizeDisplay.textContent = size;
-            const screenSize = size * map.getZoomScale(map.getZoom());
-            cursor.style.width = screenSize + 'px';
-            cursor.style.height = screenSize + 'px';
+            const scaledSize = getScaledBrushSize();
+            cursor.style.width = scaledSize + 'px';
+            cursor.style.height = scaledSize + 'px';
         }
 
         function updateCursor(e) {
-            const size = parseInt(brushSize.value) * map.getZoomScale(map.getZoom());
+            const size = getScaledBrushSize();
             cursor.style.left = (e.clientX - size / 2) + 'px';
             cursor.style.top = (e.clientY - size / 2) + 'px';
         }
@@ -179,21 +179,21 @@
             const point = map.mouseEventToLatLng(e);
             const x = (point.lng / mapWidth) * canvas.width;
             const y = canvas.height - (point.lat / mapHeight) * canvas.height;
-            
-            const scaledSize = getScaledBrushSize();
+
+            const scaledSize = getScaledBrushSize() * (canvas.width / map.getContainer().clientWidth);
 
             ctx.beginPath();
             ctx.arc(x, y, scaledSize, 0, Math.PI * 2);
-            
+
             if (currentTool === 'reveal') {
                 ctx.globalCompositeOperation = 'destination-out';
             } else {
                 ctx.globalCompositeOperation = 'source-over';
                 ctx.fillStyle = 'black';
             }
-            
+
             ctx.fill();
-            
+
             // Use requestAnimationFrame for smoother updates
             requestAnimationFrame(updateCanvasLayer);
         }
@@ -201,7 +201,8 @@
         function updateCanvasLayer() {
             canvasLayer.setUrl(canvas.toDataURL());
         }
-        // Event listeners with performance optimizations
+
+// Event listeners with performance optimizations
         let drawRequest;
         
         map.on('mousemove', (e) => {
