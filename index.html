@@ -149,9 +149,9 @@
 
         // Brush size calculations
         function getScaledBrushSize() {
-            const zoom = map.getZoom();
             const baseSize = parseInt(brushSize.value);
-            return baseSize / Math.pow(2, zoom); // Inverted scaling
+            const zoomScale = map.getZoomScale(map.getZoom());
+            return baseSize / zoomScale; // Correct scaling
         }
 
         function updateBrushSize() {
@@ -180,7 +180,7 @@
             const x = (point.lng / mapWidth) * canvas.width;
             const y = canvas.height - (point.lat / mapHeight) * canvas.height;
             
-            const scaledSize = getScaledBrushSize() * canvas.width / map.getContainer().clientWidth;
+            const scaledSize = getScaledBrushSize();
 
             ctx.beginPath();
             ctx.arc(x, y, scaledSize, 0, Math.PI * 2);
@@ -201,7 +201,6 @@
         function updateCanvasLayer() {
             canvasLayer.setUrl(canvas.toDataURL());
         }
-
         // Event listeners with performance optimizations
         let drawRequest;
         
