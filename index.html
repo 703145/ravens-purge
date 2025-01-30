@@ -6,6 +6,7 @@
     <title>Forbidden Lands RPG Map</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
+        /* Previous styles remain the same */
         body, html {
             margin: 0;
             padding: 0;
@@ -56,6 +57,7 @@
     </style>
 </head>
 <body>
+    <!-- Previous HTML structure remains the same -->
     <div class="control-panel">
         <div>
             <button id="gm-toggle" class="button">GM Mode: OFF</button>
@@ -79,7 +81,7 @@
 
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
-        // Initialize map
+        // Map initialization
         const mapWidth = 8563;
         const mapHeight = 6201;
         const mapBounds = [[0, 0], [mapHeight, mapWidth]];
@@ -93,27 +95,17 @@
             maxBoundsViscosity: 1.0
         });
 
-        // Load map image
         const mapImage = L.imageOverlay('assets/ravenland-map.jpg', mapBounds).addTo(map);
         map.fitBounds(mapBounds);
         map.setView([mapHeight / 2, mapWidth / 2], 0);
 
-        // Create canvas overlay for revealed areas
+        // Canvas setup with offscreen buffer for better performance
         const canvas = document.createElement('canvas');
         canvas.width = mapWidth;
         canvas.height = mapHeight;
-        const ctx = canvas.getContext('2d');
-
-        // Initialize with black (fog)
-        function initializeFog() {
-            ctx.fillStyle = 'black';
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.fillRect(0, 0, mapWidth, mapHeight);
-            updateCanvasLayer();
-        }
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
         const canvasLayer = L.imageOverlay(canvas, mapBounds).addTo(map);
-        initializeFog();
 
         // UI elements
         const gmToggle = document.getElementById('gm-toggle');
@@ -129,56 +121,69 @@
         let isGMMode = false;
         let isDrawing = false;
         let currentTool = 'reveal';
-        
-        // Load saved map state
-        const savedMap = localStorage.getItem('rpgMapState');
-        if (savedMap) {
-            const img = new Image();
-            img.onload = function() {
-                ctx.drawImage(img, 0, 0);
-                updateCanvasLayer();
-            };
-            img.src = savedMap;
-        }
+        let lastDrawTime = 0;
+        const drawThrottle = 16; // ~60fps
 
-        // Convert screen pixels to map units based on zoom
+        // Initialize fog
+        function initializeFog() {
+            ctx.fillStyle = 'black';
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillRect(0, 0, mapWidth, mapHeight);
+            updateCanvasLayer();
+        }
+        initializeFog();
+
+        // Load saved state
+        function loadSavedState() {
+            const savedMap = localStorage.getItem('rpgMapState');
+            if (savedMap) {
+                const img = new Image();
+                img.onload = function() {
+                    ctx.drawImage(img, 0, 0);
+                    updateCanvasLayer();
+                };
+                img.src = savedMap;
+            }
+        }
+        loadSavedState();
+
+        // Brush size calculations
         function getScaledBrushSize() {
             const zoom = map.getZoom();
             const baseSize = parseInt(brushSize.value);
-            const scale = Math.pow(2, zoom);
-            return baseSize * scale;
+            return baseSize / Math.pow(2, zoom); // Inverted scaling
         }
 
         function updateBrushSize() {
-            const size = getScaledBrushSize();
-            brushSizeDisplay.textContent = brushSize.value;
-            cursor.style.width = size + 'px';
-            cursor.style.height = size + 'px';
+            const size = brushSize.value;
+            brushSizeDisplay.textContent = size;
+            const screenSize = size * map.getZoomScale(map.getZoom());
+            cursor.style.width = screenSize + 'px';
+            cursor.style.height = screenSize + 'px';
         }
 
         function updateCursor(e) {
-            const size = getScaledBrushSize();
+            const size = parseInt(brushSize.value) * map.getZoomScale(map.getZoom());
             cursor.style.left = (e.clientX - size/2) + 'px';
             cursor.style.top = (e.clientY - size/2) + 'px';
         }
 
+        // Optimized drawing function
         function draw(e) {
             if (!isGMMode) return;
 
+            const currentTime = performance.now();
+            if (currentTime - lastDrawTime < drawThrottle) return;
+            lastDrawTime = currentTime;
+
             const point = map.mouseEventToLatLng(e);
-            const containerPoint = map.latLngToContainerPoint(point);
-            const bounds = map.getBounds();
-            const topLeft = map.latLngToContainerPoint(bounds.getNorthWest());
-            
-            // Convert to canvas coordinates
             const x = (point.lng / mapWidth) * canvas.width;
-            const y = canvas.height - (point.lat / mapHeight) * canvas.height; // Flip Y coordinate
+            const y = canvas.height - (point.lat / mapHeight) * canvas.height;
             
-            // Scale brush size based on zoom
-            const scaledBrushSize = (getScaledBrushSize() / map.getContainer().clientWidth) * canvas.width;
-            
+            const scaledSize = getScaledBrushSize() * canvas.width / map.getContainer().clientWidth;
+
             ctx.beginPath();
-            ctx.arc(x, y, scaledBrushSize/2, 0, Math.PI * 2);
+            ctx.arc(x, y, scaledSize, 0, Math.PI * 2);
             
             if (currentTool === 'reveal') {
                 ctx.globalCompositeOperation = 'destination-out';
@@ -188,19 +193,24 @@
             }
             
             ctx.fill();
-            updateCanvasLayer();
+            
+            // Use requestAnimationFrame for smoother updates
+            requestAnimationFrame(updateCanvasLayer);
         }
 
         function updateCanvasLayer() {
             canvasLayer.setUrl(canvas.toDataURL());
         }
 
-        // Event listeners
+        // Event listeners with performance optimizations
+        let drawRequest;
+        
         map.on('mousemove', (e) => {
             if (isGMMode) {
                 updateCursor(e.originalEvent);
                 if (isDrawing) {
-                    draw(e.originalEvent);
+                    cancelAnimationFrame(drawRequest);
+                    drawRequest = requestAnimationFrame(() => draw(e.originalEvent));
                 }
             }
         });
@@ -211,16 +221,13 @@
         });
         
         map.on('mouseup', () => isDrawing = false);
-        
         map.on('mouseout', () => {
             isDrawing = false;
             cursor.style.display = 'none';
         });
-        
         map.on('mouseover', () => {
             if (isGMMode) cursor.style.display = 'block';
         });
-
         map.on('zoom', updateBrushSize);
 
         gmToggle.addEventListener('click', () => {
@@ -244,9 +251,14 @@
 
         brushSize.addEventListener('input', updateBrushSize);
 
+        // Improved save functionality
         saveMapBtn.addEventListener('click', () => {
-            localStorage.setItem('rpgMapState', canvas.toDataURL());
-            alert('Map state saved!');
+            try {
+                localStorage.setItem('rpgMapState', canvas.toDataURL());
+                alert('Map state saved successfully!');
+            } catch (e) {
+                alert('Failed to save map state. The revealed area might be too large for local storage. Try clearing some areas first.');
+            }
         });
 
         clearMapBtn.addEventListener('click', () => {
