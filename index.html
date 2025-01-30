@@ -42,31 +42,31 @@
         //}).addTo(map);
 
         // Fog of war layer (example using a semi-transparent PNG)
-        var fogBounds = [[51.49, -0.12], [51.52, -0.06]]; // Adjust to match your map bounds
-        var fogLayer = L.imageOverlay('https://via.placeholder.com/1000x1000/000000/FFFFFF?text=Fog+of+War', fogBounds, {
-            opacity: 0.7 // Adjust opacity as needed
-        }).addTo(map);
+//        var fogBounds = [[51.49, -0.12], [51.52, -0.06]]; // Adjust to match your map bounds
+ //       var fogLayer = L.imageOverlay('https://via.placeholder.com/1000x1000/000000/FFFFFF?text=Fog+of+War', fogBounds, {
+   //         opacity: 0.7 // Adjust opacity as needed
+     //   }).addTo(map);
 
         // Example settlements data
-        var settlements = [
-            { name: "Settlement 1", latlng: [51.5, -0.09], description: "A small village." },
-            { name: "Settlement 2", latlng: [51.51, -0.1], description: "A bustling town." }
-        ];
+    //    var settlements = [
+      //      { name: "Settlement 1", latlng: [51.5, -0.09], description: "A small village." },
+     //       { name: "Settlement 2", latlng: [51.51, -0.1], description: "A bustling town." }
+     //   ];
 
         // Add markers for settlements
-        settlements.forEach(function(settlement) {
-            L.marker(settlement.latlng)
-                .bindPopup(`<b>${settlement.name}</b><br>${settlement.description}`)
-                .addTo(map);
-        });
+    //    settlements.forEach(function(settlement) {
+      //      L.marker(settlement.latlng)
+        //        .bindPopup(`<b>${settlement.name}</b><br>${settlement.description}`)
+          //      .addTo(map);
+        ///});
 
         // Example: Reveal an area (hole in the fog)
-        var revealedArea = L.circle([51.505, -0.09], {
-            radius: 500, // Radius in meters
-            color: 'none', // No border
-            fillColor: 'black', // Fill color
-            fillOpacity: 0.5 // Semi-transparent
-        }).addTo(map);
+        //var revealedArea = L.circle([51.505, -0.09], {
+//            radius: 500, // Radius in meters
+   //         color: 'none', // No border
+     //       fillColor: 'black', // Fill color
+       //     fillOpacity: 0.5 // Semi-transparent
+       // }).addTo(map);
     </script>
 </body>
 </html>
