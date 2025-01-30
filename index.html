@@ -6,7 +6,9 @@
     <title>Forbidden Lands RPG Map</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <!-- Basic styling for the map container -->
+    <!-- Leaflet Draw CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <!-- Basic styling -->
     <style>
         body, html {
             margin: 0;
@@ -16,57 +18,119 @@
         }
         #map {
             width: 100%;
-            height: 100vh; /* Full viewport height */
+            height: 100vh;
         }
         .leaflet-popup-content {
             font-size: 14px;
         }
+        #gm-toggle {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
+    <!-- GM toggle button -->
+    <div id="gm-toggle">GM Mode: OFF</div>
+
     <!-- Map container -->
     <div id="map"></div>
 
     <!-- Leaflet JavaScript -->
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <!-- Leaflet Draw Plugin -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
     <script>
         // Initialize the map
-        var map = L.map('map').setView([51.505, -0.09], 13); // Default center and zoom level
+        var map = L.map('map').setView([500, 500], 2); // Center on your map
 
-        var mapBounds = [[0, 0], [8563, 6201]]; // Adjust to match your map's dimensions
-        var mapImage = L.imageOverlay('assets/ravenland-map.jpg', mapBounds).addTo(map);
+        // Load your custom RPG map
+        var mapBounds = [[0, 0], [1000, 1000]]; // Adjust to match your map's dimensions
+        var mapImage = L.imageOverlay('assets/rpg-map.jpg', mapBounds).addTo(map);
 
-        // Add a tile layer (OpenStreetMap)
-        //L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        //    attribution: '© OpenStreetMap contributors'
-        //}).addTo(map);
+        // Set map bounds to restrict panning
+        map.setMaxBounds(mapBounds);
 
-        // Fog of war layer (example using a semi-transparent PNG)
-//        var fogBounds = [[51.49, -0.12], [51.52, -0.06]]; // Adjust to match your map bounds
- //       var fogLayer = L.imageOverlay('https://via.placeholder.com/1000x1000/000000/FFFFFF?text=Fog+of+War', fogBounds, {
-   //         opacity: 0.7 // Adjust opacity as needed
-     //   }).addTo(map);
+        // Fog of war layer (black rectangle covering the whole map)
+        var fogLayer = L.rectangle(mapBounds, {
+            color: 'black',
+            fillColor: 'black',
+            fillOpacity: 1,
+            interactive: false // Prevent interaction with the fog layer
+        }).addTo(map);
 
-        // Example settlements data
-    //    var settlements = [
-      //      { name: "Settlement 1", latlng: [51.5, -0.09], description: "A small village." },
-     //       { name: "Settlement 2", latlng: [51.51, -0.1], description: "A bustling town." }
-     //   ];
+        // Array to store revealed areas
+        var revealedAreas = [];
 
-        // Add markers for settlements
-    //    settlements.forEach(function(settlement) {
-      //      L.marker(settlement.latlng)
-        //        .bindPopup(`<b>${settlement.name}</b><br>${settlement.description}`)
-          //      .addTo(map);
-        ///});
+        // Function to update the fog layer
+        function updateFog() {
+            fogLayer.setBounds(mapBounds); // Reset fog to cover the whole map
+            revealedAreas.forEach(function(area) {
+                fogLayer.setBounds([
+                    [area.getBounds().getSouthWest().lat, area.getBounds().getSouthWest().lng],
+                    [area.getBounds().getNorthEast().lat, area.getBounds().getNorthEast().lng]
+                ]);
+            });
+        }
 
-        // Example: Reveal an area (hole in the fog)
-        //var revealedArea = L.circle([51.505, -0.09], {
-//            radius: 500, // Radius in meters
-   //         color: 'none', // No border
-     //       fillColor: 'black', // Fill color
-       //     fillOpacity: 0.5 // Semi-transparent
-       // }).addTo(map);
+        // Initialize the drawing tool
+        var drawnItems = new L.FeatureGroup().addTo(map);
+        var drawControl = new L.Control.Draw({
+            draw: {
+                rectangle: {
+                    shapeOptions: {
+                        color: 'transparent',
+                        fillColor: 'transparent'
+                    }
+                },
+                polygon: false,
+                circle: false,
+                marker: false,
+                polyline: false
+            },
+            edit: {
+                featureGroup: drawnItems
+            }
+        });
+        map.addControl(drawControl);
+
+        // Handle drawing events
+        map.on(L.Draw.Event.CREATED, function(event) {
+            var layer = event.layer;
+            drawnItems.addLayer(layer);
+            revealedAreas.push(layer);
+            updateFog();
+        });
+
+        // Handle edit events
+        map.on(L.Draw.Event.EDITED, function(event) {
+            revealedAreas = [];
+            drawnItems.eachLayer(function(layer) {
+                revealedAreas.push(layer);
+            });
+            updateFog();
+        });
+
+        // GM toggle button
+        var gmMode = false;
+        var gmToggle = document.getElementById('gm-toggle');
+        gmToggle.addEventListener('click', function() {
+            gmMode = !gmMode;
+            gmToggle.textContent = 'GM Mode: ' + (gmMode ? 'ON' : 'OFF');
+            if (gmMode) {
+                fogLayer.setStyle({ fillOpacity: 0 }); // Reveal the whole map
+            } else {
+                fogLayer.setStyle({ fillOpacity: 1 }); // Restore fog
+                updateFog();
+            }
+        });
     </script>
 </body>
 </html>
