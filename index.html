@@ -27,12 +27,13 @@
             position: absolute;
             top: 10px;
             right: 10px;
-            z-index: 1000;
+            z-index: 1001; /* Ensure it's above the map */
             background: white;
             padding: 5px;
             border: 1px solid #ccc;
             border-radius: 4px;
             cursor: pointer;
+            pointer-events: auto; /* Ensures it remains clickable */
         }
     </style>
 </head>
@@ -58,6 +59,9 @@
             maxBoundsViscosity: 1.0, // Fully lock panning inside the map
             inertia: false // Disable smooth "bouncing back"
         });
+
+        // ChatGPT: Prevents Leaflet from absorbing all clicks.
+        map.getContainer().style.pointerEvents = 'auto';
 
         // Define the map bounds (based on your image dimensions)
         var mapWidth = 8563; // Width of your map image
