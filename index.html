@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ravenland</title>
+    <title>Forbidden Lands RPG Map</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <!-- Leaflet Draw CSS -->
@@ -35,7 +35,7 @@
             cursor: pointer;
         }
     </style>
-</head> 
+</head>
 <body>
     <!-- GM toggle button -->
     <div id="gm-toggle">GM Mode: OFF</div>
@@ -48,15 +48,25 @@
     <!-- Leaflet Draw Plugin -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
     <script>
-        // Initialize the map
-        var map = L.map('map').setView([3100, 4281], 2); // Center on your map
+        // Initialize the map with L.CRS.Simple
+        var map = L.map('map', {
+            crs: L.CRS.Simple, // Use simple coordinate system
+            minZoom: -2, // Adjust based on your map size
+            maxZoom: 2, // Adjust based on your map size
+            zoomControl: false // Disable default zoom control
+        });
+
+        // Define the map bounds (based on your image dimensions)
+        var mapWidth = 8563; // Width of your map image
+        var mapHeight = 6201; // Height of your map image
+        var mapBounds = [[0, 0], [mapHeight, mapWidth]]; // Height first, then width
 
         // Load your custom RPG map
-        var mapBounds = [[0, 0], [6201, 8563]]; // Adjust to match your map's dimensions
         var mapImage = L.imageOverlay('assets/ravenland-map.jpg', mapBounds).addTo(map);
 
-        // Set map bounds to restrict panning
-        map.setMaxBounds(mapBounds);
+        // Set map bounds and initial view
+        map.fitBounds(mapBounds);
+        map.setView([mapHeight / 2, mapWidth / 2], 0); // Center the map
 
         // Fog of war layer (black rectangle covering the whole map)
         var fogLayer = L.rectangle(mapBounds, {
