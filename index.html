@@ -4,11 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Forbidden Lands RPG Map</title>
-    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-    <!-- Leaflet Draw CSS -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
-    <!-- Basic styling -->
     <style>
         body, html {
             margin: 0;
@@ -20,133 +16,218 @@
             width: 100%;
             height: 100vh;
         }
-        .leaflet-popup-content {
-            font-size: 14px;
-        }
-        #gm-toggle {
+        .control-panel {
             position: absolute;
             top: 10px;
             right: 10px;
             z-index: 1000;
             background: white;
-            padding: 5px;
+            padding: 10px;
             border: 1px solid #ccc;
             border-radius: 4px;
+        }
+        .brush-size {
+            width: 100px;
+            margin: 5px 0;
+        }
+        .button {
+            margin: 5px;
+            padding: 5px 10px;
             cursor: pointer;
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+        .button:hover {
+            background: #e0e0e0;
+        }
+        .button.active {
+            background: #007bff;
+            color: white;
+        }
+        #cursor {
+            position: absolute;
+            border: 2px solid red;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
         }
     </style>
 </head>
 <body>
-    <!-- GM toggle button -->
-    <div id="gm-toggle">GM Mode: OFF</div>
+    <div class="control-panel">
+        <div>
+            <button id="gm-toggle" class="button">GM Mode: OFF</button>
+        </div>
+        <div>
+            <button id="reveal-toggle" class="button">Reveal Mode</button>
+            <button id="erase-toggle" class="button">Erase Mode</button>
+        </div>
+        <div>
+            <label>Brush Size: <span id="brush-size-display">20</span></label>
+            <input type="range" id="brush-size" class="brush-size" min="10" max="100" value="20">
+        </div>
+        <div>
+            <button id="save-map" class="button">Save Map</button>
+            <button id="clear-map" class="button">Clear All</button>
+        </div>
+    </div>
 
-    <!-- Map container -->
+    <div id="cursor"></div>
     <div id="map"></div>
 
-    <!-- Leaflet JavaScript -->
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <!-- Leaflet Draw Plugin -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
     <script>
-        // Initialize the map with L.CRS.Simple
-        var map = L.map('map', {
-            crs: L.CRS.Simple, // Use simple coordinate system
-            minZoom: -2, // Adjust based on your map size
-            maxZoom: 2, // Adjust based on your map size
-            zoomControl: false, // Disable default zoom control
-            maxBounds: mapBounds, // Restrict panning to map area
-            maxBoundsViscosity: 1.0, // Fully lock panning inside the map
-            inertia: false // Disable smooth "bouncing back"
+        // Initialize map
+        const mapWidth = 8563;
+        const mapHeight = 6201;
+        const mapBounds = [[0, 0], [mapHeight, mapWidth]];
+
+        const map = L.map('map', {
+            crs: L.CRS.Simple,
+            minZoom: -2,
+            maxZoom: 2,
+            zoomControl: true,
+            maxBounds: mapBounds,
+            maxBoundsViscosity: 1.0
         });
 
-        // Define the map bounds (based on your image dimensions)
-        var mapWidth = 8563; // Width of your map image
-        var mapHeight = 6201; // Height of your map image
-        var mapBounds = [[0, 0], [mapHeight, mapWidth]]; // Height first, then width
-
-        // Load your custom RPG map
-        var mapImage = L.imageOverlay('assets/ravenland-map.jpg', mapBounds).addTo(map);
-
-        // Set map bounds and initial view
+        // Load map image
+        const mapImage = L.imageOverlay('assets/ravenland-map.jpg', mapBounds).addTo(map);
         map.fitBounds(mapBounds);
-        map.setView([mapHeight / 2, mapWidth / 2], 0); // Center the map
+        map.setView([mapHeight / 2, mapWidth / 2], 0);
 
-        // Restrict panning to the map area
-        map.setMaxBounds(mapBounds);
+        // Create canvas overlay for revealed areas
+        const canvas = document.createElement('canvas');
+        canvas.width = mapWidth;
+        canvas.height = mapHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, mapWidth, mapHeight);
 
-        // Fog of war layer (black rectangle covering the whole map)
-        var fogLayer = L.rectangle(mapBounds, {
-            color: 'black',
-            fillColor: 'black',
-            fillOpacity: 1,
-            interactive: false // Prevent interaction with the fog layer
-        }).addTo(map);
+        const canvasLayer = L.imageOverlay(canvas, mapBounds).addTo(map);
 
-        // Array to store revealed areas
-        var revealedAreas = [];
+        // UI elements
+        const gmToggle = document.getElementById('gm-toggle');
+        const revealToggle = document.getElementById('reveal-toggle');
+        const eraseToggle = document.getElementById('erase-toggle');
+        const brushSize = document.getElementById('brush-size');
+        const brushSizeDisplay = document.getElementById('brush-size-display');
+        const cursor = document.getElementById('cursor');
+        const saveMapBtn = document.getElementById('save-map');
+        const clearMapBtn = document.getElementById('clear-map');
 
-        // Function to update the fog layer
-        function updateFog() {
-            fogLayer.setBounds(mapBounds); // Reset fog to cover the whole map
-            revealedAreas.forEach(function(area) {
-                fogLayer.setBounds([
-                    [area.getBounds().getSouthWest().lat, area.getBounds().getSouthWest().lng],
-                    [area.getBounds().getNorthEast().lat, area.getBounds().getNorthEast().lng]
-                ]);
-            });
+        // State
+        let isGMMode = false;
+        let isDrawing = false;
+        let currentTool = 'reveal'; // 'reveal' or 'erase'
+        
+        // Load saved map state
+        const savedMap = localStorage.getItem('rpgMapState');
+        if (savedMap) {
+            const img = new Image();
+            img.onload = function() {
+                ctx.drawImage(img, 0, 0);
+                updateCanvasLayer();
+            };
+            img.src = savedMap;
         }
 
-        // Initialize the drawing tool
-        var drawnItems = new L.FeatureGroup().addTo(map);
-        var drawControl = new L.Control.Draw({
-            draw: {
-                rectangle: {
-                    shapeOptions: {
-                        color: 'transparent',
-                        fillColor: 'transparent'
-                    }
-                },
-                polygon: false,
-                circle: false,
-                marker: false,
-                polyline: false
-            },
-            edit: {
-                featureGroup: drawnItems
+        // Tool functions
+        function updateBrushSize() {
+            const size = brushSize.value;
+            brushSizeDisplay.textContent = size;
+            cursor.style.width = size + 'px';
+            cursor.style.height = size + 'px';
+        }
+
+        function updateCursor(e) {
+            const size = brushSize.value;
+            const rect = map.getContainer().getBoundingClientRect();
+            cursor.style.left = (e.clientX - size/2) + 'px';
+            cursor.style.top = (e.clientY - size/2) + 'px';
+        }
+
+        function draw(e) {
+            if (!isDrawing || !isGMMode) return;
+            
+            const point = map.mouseEventToLatLng(e);
+            const pixelPoint = map.latLngToContainerPoint(point);
+            const bounds = map.getBounds();
+            const topLeft = map.latLngToContainerPoint(bounds.getNorthWest());
+            
+            const x = (point.lng / mapWidth) * canvas.width;
+            const y = (point.lat / mapHeight) * canvas.height;
+            
+            ctx.beginPath();
+            ctx.arc(x, y, brushSize.value/2, 0, Math.PI * 2);
+            ctx.fillStyle = currentTool === 'reveal' ? 'transparent' : 'black';
+            ctx.globalCompositeOperation = currentTool === 'reveal' ? 'destination-out' : 'source-over';
+            ctx.fill();
+            
+            updateCanvasLayer();
+        }
+
+        function updateCanvasLayer() {
+            canvasLayer.setUrl(canvas.toDataURL());
+        }
+
+        // Event listeners
+        map.on('mousemove', (e) => {
+            if (isGMMode) {
+                updateCursor(e.originalEvent);
+                draw(e.originalEvent);
             }
         });
-        map.addControl(drawControl);
 
-        // Handle drawing events
-        map.on(L.Draw.Event.CREATED, function(event) {
-            var layer = event.layer;
-            drawnItems.addLayer(layer);
-            revealedAreas.push(layer);
-            updateFog();
+        map.on('mousedown', () => isDrawing = true);
+        map.on('mouseup', () => isDrawing = false);
+        map.on('mouseout', () => {
+            isDrawing = false;
+            cursor.style.display = 'none';
+        });
+        map.on('mouseover', () => {
+            if (isGMMode) cursor.style.display = 'block';
         });
 
-        // Handle edit events
-        map.on(L.Draw.Event.EDITED, function(event) {
-            revealedAreas = [];
-            drawnItems.eachLayer(function(layer) {
-                revealedAreas.push(layer);
-            });
-            updateFog();
+        gmToggle.addEventListener('click', () => {
+            isGMMode = !isGMMode;
+            gmToggle.textContent = 'GM Mode: ' + (isGMMode ? 'ON' : 'OFF');
+            gmToggle.classList.toggle('active');
+            cursor.style.display = isGMMode ? 'block' : 'none';
         });
 
-        // GM toggle button
-        var gmMode = false;
-        var gmToggle = document.getElementById('gm-toggle');
-        gmToggle.addEventListener('click', function() {
-            gmMode = !gmMode;
-            gmToggle.textContent = 'GM Mode: ' + (gmMode ? 'ON' : 'OFF');
-            if (gmMode) {
-                fogLayer.setStyle({ fillOpacity: 0 }); // Reveal the whole map
-            } else {
-                fogLayer.setStyle({ fillOpacity: 1 }); // Restore fog
-                updateFog();
+        revealToggle.addEventListener('click', () => {
+            currentTool = 'reveal';
+            revealToggle.classList.add('active');
+            eraseToggle.classList.remove('active');
+        });
+
+        eraseToggle.addEventListener('click', () => {
+            currentTool = 'erase';
+            eraseToggle.classList.add('active');
+            revealToggle.classList.remove('active');
+        });
+
+        brushSize.addEventListener('input', updateBrushSize);
+
+        saveMapBtn.addEventListener('click', () => {
+            localStorage.setItem('rpgMapState', canvas.toDataURL());
+            alert('Map state saved!');
+        });
+
+        clearMapBtn.addEventListener('click', () => {
+            if (confirm('Are you sure you want to clear all revealed areas?')) {
+                ctx.fillStyle = 'black';
+                ctx.fillRect(0, 0, mapWidth, mapHeight);
+                updateCanvasLayer();
             }
         });
+
+        // Initial setup
+        updateBrushSize();
+        revealToggle.classList.add('active');
     </script>
 </body>
 </html>
