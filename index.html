@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Forbidden Lands RPG Map</title>
+    <title>Forbidden Lands v0.17</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
         /* Previous styles remain the same */
@@ -147,20 +147,21 @@
         }
         loadSavedState();
 
-        // Brush size calculations
-        function getScaledBrushSize() {
-            const zoom = map.getZoom();
-            const baseSize = parseInt(brushSize.value);
-            return baseSize / Math.pow(2, zoom); // Inverted scaling
-        }
-
         function updateBrushSize() {
             const size = brushSize.value;
             brushSizeDisplay.textContent = size;
-            const screenSize = size * map.getZoomScale(map.getZoom());
-            cursor.style.width = screenSize + 'px';
-            cursor.style.height = screenSize + 'px';
+            const scaledSize = getScaledBrushSize();
+            cursor.style.width = scaledSize + 'px';
+            cursor.style.height = scaledSize + 'px';
         }
+
+        // Brush size scaling based on zoom
+        function getScaledBrushSize() {
+            const zoom = map.getZoom();
+            const baseSize = parseInt(brushSize.value);
+            return baseSize * Math.pow(2, -zoom); // Adjust to scale the size down as you zoom out
+        }
+
 
         function updateCursor(e) {
             const size = parseInt(brushSize.value) * map.getZoomScale(map.getZoom());
