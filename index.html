@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Forbidden Lands RPG New Fog of War</title>
+    <title>Forbidden Lands RPG Map</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
         body, html {
@@ -109,10 +109,11 @@
             ctx.fillStyle = 'black';
             ctx.globalCompositeOperation = 'source-over';
             ctx.fillRect(0, 0, mapWidth, mapHeight);
+            updateCanvasLayer();
         }
-        initializeFog();
 
         const canvasLayer = L.imageOverlay(canvas, mapBounds).addTo(map);
+        initializeFog();
 
         // UI elements
         const gmToggle = document.getElementById('gm-toggle');
@@ -127,7 +128,7 @@
         // State
         let isGMMode = false;
         let isDrawing = false;
-        let currentTool = 'reveal'; // 'reveal' or 'erase'
+        let currentTool = 'reveal';
         
         // Load saved map state
         const savedMap = localStorage.getItem('rpgMapState');
@@ -140,17 +141,23 @@
             img.src = savedMap;
         }
 
-        // Tool functions
+        // Convert screen pixels to map units based on zoom
+        function getScaledBrushSize() {
+            const zoom = map.getZoom();
+            const baseSize = parseInt(brushSize.value);
+            const scale = Math.pow(2, zoom);
+            return baseSize * scale;
+        }
+
         function updateBrushSize() {
-            const size = brushSize.value;
-            brushSizeDisplay.textContent = size;
+            const size = getScaledBrushSize();
+            brushSizeDisplay.textContent = brushSize.value;
             cursor.style.width = size + 'px';
             cursor.style.height = size + 'px';
         }
 
         function updateCursor(e) {
-            const size = brushSize.value;
-            const rect = map.getContainer().getBoundingClientRect();
+            const size = getScaledBrushSize();
             cursor.style.left = (e.clientX - size/2) + 'px';
             cursor.style.top = (e.clientY - size/2) + 'px';
         }
@@ -159,14 +166,19 @@
             if (!isGMMode) return;
 
             const point = map.mouseEventToLatLng(e);
+            const containerPoint = map.latLngToContainerPoint(point);
+            const bounds = map.getBounds();
+            const topLeft = map.latLngToContainerPoint(bounds.getNorthWest());
             
-            // Convert lat/lng to pixel coordinates
-            const scale = canvas.width / mapWidth;
-            const x = point.lng * scale;
-            const y = point.lat * scale;
+            // Convert to canvas coordinates
+            const x = (point.lng / mapWidth) * canvas.width;
+            const y = canvas.height - (point.lat / mapHeight) * canvas.height; // Flip Y coordinate
+            
+            // Scale brush size based on zoom
+            const scaledBrushSize = (getScaledBrushSize() / map.getContainer().clientWidth) * canvas.width;
             
             ctx.beginPath();
-            ctx.arc(x, y, brushSize.value/2, 0, Math.PI * 2);
+            ctx.arc(x, y, scaledBrushSize/2, 0, Math.PI * 2);
             
             if (currentTool === 'reveal') {
                 ctx.globalCompositeOperation = 'destination-out';
@@ -209,17 +221,13 @@
             if (isGMMode) cursor.style.display = 'block';
         });
 
+        map.on('zoom', updateBrushSize);
+
         gmToggle.addEventListener('click', () => {
             isGMMode = !isGMMode;
             gmToggle.textContent = 'GM Mode: ' + (isGMMode ? 'ON' : 'OFF');
             gmToggle.classList.toggle('active');
             cursor.style.display = isGMMode ? 'block' : 'none';
-            
-            // When GM mode is turned off, ensure the fog is visible
-            if (!isGMMode && !savedMap) {
-                initializeFog();
-                updateCanvasLayer();
-            }
         });
 
         revealToggle.addEventListener('click', () => {
@@ -244,7 +252,6 @@
         clearMapBtn.addEventListener('click', () => {
             if (confirm('Are you sure you want to clear all revealed areas?')) {
                 initializeFog();
-                updateCanvasLayer();
                 localStorage.removeItem('rpgMapState');
             }
         });
