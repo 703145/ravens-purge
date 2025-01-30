@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Forbidden Lands C v0.19</title>
+    <title>Forbidden Lands v C.0.20</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
+        /* Previous styles remain the same */
         body, html {
             margin: 0;
             padding: 0;
@@ -53,24 +54,10 @@
             z-index: 1000;
             display: none;
         }
-        #map.drawing-mode {
-            cursor: crosshair !important;
-        }
-        .status-indicator {
-            position: absolute;
-            top: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 5px 10px;
-            border-radius: 4px;
-            z-index: 1000;
-            display: none;
-        }
     </style>
 </head>
 <body>
+    <!-- Previous HTML structure remains the same -->
     <div class="control-panel">
         <div>
             <button id="gm-toggle" class="button">GM Mode: OFF</button>
@@ -89,12 +76,12 @@
         </div>
     </div>
 
-    <div id="status" class="status-indicator">Drawing Mode - Press ESC to exit</div>
     <div id="cursor"></div>
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
+        // Map initialization
         const mapWidth = 8563;
         const mapHeight = 6201;
         const mapBounds = [[0, 0], [mapHeight, mapWidth]];
@@ -112,153 +99,102 @@
         map.fitBounds(mapBounds);
         map.setView([mapHeight / 2, mapWidth / 2], 0);
 
-        // Canvas setup with memory optimization
+        // Canvas setup with offscreen buffer for better performance
         const canvas = document.createElement('canvas');
         canvas.width = mapWidth;
         canvas.height = mapHeight;
-        const ctx = canvas.getContext('2d', { 
-            willReadFrequently: true,
-            alpha: false
-        });
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
         const canvasLayer = L.imageOverlay(canvas, mapBounds).addTo(map);
 
         // UI elements
-        const elements = {
-            gmToggle: document.getElementById('gm-toggle'),
-            revealToggle: document.getElementById('reveal-toggle'),
-            eraseToggle: document.getElementById('erase-toggle'),
-            brushSize: document.getElementById('brush-size'),
-            brushSizeDisplay: document.getElementById('brush-size-display'),
-            cursor: document.getElementById('cursor'),
-            saveMapBtn: document.getElementById('save-map'),
-            clearMapBtn: document.getElementById('clear-map'),
-            status: document.getElementById('status'),
-            map: document.getElementById('map')
-        };
+        const gmToggle = document.getElementById('gm-toggle');
+        const revealToggle = document.getElementById('reveal-toggle');
+        const eraseToggle = document.getElementById('erase-toggle');
+        const brushSize = document.getElementById('brush-size');
+        const brushSizeDisplay = document.getElementById('brush-size-display');
+        const cursor = document.getElementById('cursor');
+        const saveMapBtn = document.getElementById('save-map');
+        const clearMapBtn = document.getElementById('clear-map');
 
         // State
-        const state = {
-            isGMMode: false,
-            isDrawing: false,
-            isDrawingMode: false,
-            currentTool: 'reveal',
-            lastPoint: null,
-            lastDrawTime: 0
-        };
+        let isGMMode = false;
+        let isDrawing = false;
+        let currentTool = 'reveal';
+        let lastDrawTime = 0;
+        const drawThrottle = 16; // ~60fps
 
         // Initialize fog
         function initializeFog() {
             ctx.fillStyle = 'black';
+            ctx.globalCompositeOperation = 'source-over';
             ctx.fillRect(0, 0, mapWidth, mapHeight);
             updateCanvasLayer();
         }
         initializeFog();
 
         // Load saved state
-        const savedMap = localStorage.getItem('rpgMapState');
-        if (savedMap) {
-            const img = new Image();
-            img.onload = function() {
-                ctx.drawImage(img, 0, 0);
-                updateCanvasLayer();
-            };
-            img.src = savedMap;
+        function loadSavedState() {
+            const savedMap = localStorage.getItem('rpgMapState');
+            if (savedMap) {
+                const img = new Image();
+                img.onload = function() {
+                    ctx.drawImage(img, 0, 0);
+                    updateCanvasLayer();
+                };
+                img.src = savedMap;
+            }
         }
+        loadSavedState();
 
-        // Drawing mode functions
-        function enableDrawingMode() {
-            state.isDrawingMode = true;
-            elements.map.classList.add('drawing-mode');
-            elements.status.style.display = 'block';
-            map.dragging.disable();
-            map.boxZoom.disable();
-            map.touchZoom.disable();
-            map.doubleClickZoom.disable();
-            map.scrollWheelZoom.disable();
-        }
-
-        function disableDrawingMode() {
-            state.isDrawingMode = false;
-            elements.map.classList.remove('drawing-mode');
-            elements.status.style.display = 'none';
-            map.dragging.enable();
-            map.boxZoom.enable();
-            map.touchZoom.enable();
-            map.doubleClickZoom.enable();
-            map.scrollWheelZoom.enable();
-            state.isDrawing = false;
-            
-            // Remove active state from tool buttons
-            elements.revealToggle.classList.remove('active');
-            elements.eraseToggle.classList.remove('active');
-        }
-
-        // Improved brush size calculations
+        // Brush size calculations
         function getScaledBrushSize() {
             const zoom = map.getZoom();
-            const baseSize = parseInt(elements.brushSize.value);
-            return baseSize / Math.pow(2, zoom + 1);
+            const baseSize = parseInt(brushSize.value);
+            return baseSize / Math.pow(2, zoom); // Inverted scaling
         }
 
         function updateBrushSize() {
-            const size = elements.brushSize.value;
-            elements.brushSizeDisplay.textContent = size;
+            const size = brushSize.value;
+            brushSizeDisplay.textContent = size;
             const screenSize = size * map.getZoomScale(map.getZoom());
-            elements.cursor.style.width = screenSize + 'px';
-            elements.cursor.style.height = screenSize + 'px';
+            cursor.style.width = screenSize + 'px';
+            cursor.style.height = screenSize + 'px';
         }
 
         function updateCursor(e) {
-            const size = parseInt(elements.brushSize.value) * map.getZoomScale(map.getZoom());
-            elements.cursor.style.left = (e.clientX - size/2) + 'px';
-            elements.cursor.style.top = (e.clientY - size/2) + 'px';
+            const size = parseInt(brushSize.value) * map.getZoomScale(map.getZoom());
+            cursor.style.left = (e.clientX - size / 2) + 'px';
+            cursor.style.top = (e.clientY - size / 2) + 'px';
         }
 
-        // Fixed drawing function
-        function drawPoint(point) {
-            // Convert lat/lng to pixel coordinates directly using map methods
-            const layerPoint = map.latLngToContainerPoint(point);
-            const { x: canvasX, y: canvasY } = map.latLngToLayerPoint(point);
-            const scaledSize = getScaledBrushSize();
-
-            if (state.lastPoint) {
-                const lastLayerPoint = map.latLngToLayerPoint(state.lastPoint);
-                
-                // Interpolate points for smooth lines
-                const distance = Math.sqrt(Math.pow(canvasX - lastLayerPoint.x, 2) + Math.pow(canvasY - lastLayerPoint.y, 2));
-                const steps = Math.ceil(distance / (scaledSize / 4));
-                
-                for (let i = 0; i <= steps; i++) {
-                    const px = lastLayerPoint.x + (canvasX - lastLayerPoint.x) * (i / steps);
-                    const py = lastLayerPoint.y + (canvasY - lastLayerPoint.y) * (i / steps);
-                    
-                    ctx.beginPath();
-                    ctx.arc(px, py, scaledSize, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-            } else {
-                ctx.beginPath();
-                ctx.arc(canvasX, canvasY, scaledSize, 0, Math.PI * 2);
-                ctx.fill();
-            }
-
-            state.lastPoint = point;
-        }
-
+        // Optimized drawing function
         function draw(e) {
-            if (!state.isGMMode || !state.isDrawingMode) return;
+            if (!isGMMode) return;
 
-            const now = performance.now();
-            if (now - state.lastDrawTime < 16) return; // 60fps throttle
-            state.lastDrawTime = now;
+            const currentTime = performance.now();
+            if (currentTime - lastDrawTime < drawThrottle) return;
+            lastDrawTime = currentTime;
 
             const point = map.mouseEventToLatLng(e);
+            const x = (point.lng / mapWidth) * canvas.width;
+            const y = canvas.height - (point.lat / mapHeight) * canvas.height;
+            
+            const scaledSize = getScaledBrushSize() * canvas.width / map.getContainer().clientWidth;
 
-            ctx.globalCompositeOperation = state.currentTool === 'reveal' ? 'destination-out' : 'source-over';
-            ctx.fillStyle = 'black';
-
-            drawPoint(point);
+            ctx.beginPath();
+            ctx.arc(x, y, scaledSize, 0, Math.PI * 2);
+            
+            if (currentTool === 'reveal') {
+                ctx.globalCompositeOperation = 'destination-out';
+            } else {
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.fillStyle = 'black';
+            }
+            
+            ctx.fill();
+            
+            // Use requestAnimationFrame for smoother updates
             requestAnimationFrame(updateCanvasLayer);
         }
 
@@ -266,102 +202,67 @@
             canvasLayer.setUrl(canvas.toDataURL());
         }
 
-        // Event listeners
+        // Event listeners with performance optimizations
+        let drawRequest;
+        
         map.on('mousemove', (e) => {
-            if (state.isGMMode) {
+            if (isGMMode) {
                 updateCursor(e.originalEvent);
-                if (state.isDrawing) {
-                    draw(e.originalEvent);
+                if (isDrawing) {
+                    cancelAnimationFrame(drawRequest);
+                    drawRequest = requestAnimationFrame(() => draw(e.originalEvent));
                 }
             }
         });
 
         map.on('mousedown', (e) => {
-            if (state.isDrawingMode) {
-                state.isDrawing = true;
-                state.lastPoint = null;
+            if (isGMMode) {
+                isDrawing = true;
                 draw(e.originalEvent);
             }
         });
 
-        map.on('mouseup', () => {
-            state.isDrawing = false;
-            state.lastPoint = null;
-        });
-
+        map.on('mouseup', () => isDrawing = false);
         map.on('mouseout', () => {
-            state.isDrawing = false;
-            state.lastPoint = null;
-            elements.cursor.style.display = 'none';
+            isDrawing = false;
+            cursor.style.display = 'none';
         });
-
         map.on('mouseover', () => {
-            if (state.isGMMode) elements.cursor.style.display = 'block';
+            if (isGMMode) cursor.style.display = 'block';
+        });
+        map.on('zoom', updateBrushSize);
+
+        gmToggle.addEventListener('click', () => {
+            isGMMode = !isGMMode;
+            gmToggle.textContent = 'GM Mode: ' + (isGMMode ? 'ON' : 'OFF');
+            gmToggle.classList.toggle('active');
+            cursor.style.display = isGMMode ? 'block' : 'none';
         });
 
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                disableDrawingMode();
-            }
+        revealToggle.addEventListener('click', () => {
+            currentTool = 'reveal';
+            revealToggle.classList.add('active');
+            eraseToggle.classList.remove('active');
         });
 
-        // UI event listeners with updated toggle behavior
-        elements.gmToggle.addEventListener('click', () => {
-            state.isGMMode = !state.isGMMode;
-            elements.gmToggle.textContent = 'GM Mode: ' + (state.isGMMode ? 'ON' : 'OFF');
-            elements.gmToggle.classList.toggle('active');
-            elements.cursor.style.display = state.isGMMode ? 'block' : 'none';
-            if (!state.isGMMode) {
-                disableDrawingMode();
-            }
+        eraseToggle.addEventListener('click', () => {
+            currentTool = 'erase';
+            eraseToggle.classList.add('active');
+            revealToggle.classList.remove('active');
         });
 
-        elements.revealToggle.addEventListener('click', () => {
-            if (state.currentTool === 'reveal' && state.isDrawingMode) {
-                // If already in reveal mode and drawing, disable drawing
-                disableDrawingMode();
-            } else {
-                // Enable reveal mode and drawing
-                state.currentTool = 'reveal';
-                elements.revealToggle.classList.add('active');
-                elements.eraseToggle.classList.remove('active');
-                enableDrawingMode();
-            }
+        brushSize.addEventListener('input', updateBrushSize);
+
+        saveMapBtn.addEventListener('click', () => {
+            const mapData = canvas.toDataURL();
+            localStorage.setItem('rpgMapState', mapData);
         });
 
-        elements.eraseToggle.addEventListener('click', () => {
-            if (state.currentTool === 'erase' && state.isDrawingMode) {
-                // If already in erase mode and drawing, disable drawing
-                disableDrawingMode();
-            } else {
-                // Enable erase mode and drawing
-                state.currentTool = 'erase';
-                elements.eraseToggle.classList.add('active');
-                elements.revealToggle.classList.remove('active');
-                enableDrawingMode();
-            }
+        clearMapBtn.addEventListener('click', () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            initializeFog();
+            updateCanvasLayer();
         });
-
-        elements.brushSize.addEventListener('input', updateBrushSize);
-
-        elements.saveMapBtn.addEventListener('click', () => {
-            try {
-                localStorage.setItem('rpgMapState', canvas.toDataURL());
-                alert('Map state saved successfully!');
-            } catch (e) {
-                alert('Failed to save map state. The revealed area might be too large for local storage.');
-            }
-        });
-
-        elements.clearMapBtn.addEventListener('click', () => {
-            if (confirm('Are you sure you want to clear all revealed areas?')) {
-                initializeFog();
-                localStorage.removeItem('rpgMapState');
-            }
-        });
-
-        // Initial setup
-        updateBrushSize();
     </script>
 </body>
 </html>
