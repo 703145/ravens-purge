@@ -68,6 +68,9 @@
         map.fitBounds(mapBounds);
         map.setView([mapHeight / 2, mapWidth / 2], 0); // Center the map
 
+        // Restrict panning to the map area
+        map.setMaxBounds(mapBounds);
+
         // Fog of war layer (black rectangle covering the whole map)
         var fogLayer = L.rectangle(mapBounds, {
             color: 'black',
