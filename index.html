@@ -54,6 +54,9 @@
             minZoom: -2, // Adjust based on your map size
             maxZoom: 2, // Adjust based on your map size
             zoomControl: false // Disable default zoom control
+            maxBounds: mapBounds, // Restrict panning to map area
+            maxBoundsViscosity: 1.0, // Fully lock panning inside the map
+            inertia: false // Disable smooth "bouncing back"
         });
 
         // Define the map bounds (based on your image dimensions)
