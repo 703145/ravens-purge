@@ -3,10 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Forbidden Lands deep v0.22</title>
+    <title>Forbidden Lands Map</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
-        /* Previous styles remain the same */
         body, html {
             margin: 0;
             padding: 0;
@@ -17,66 +16,9 @@
             width: 100%;
             height: 100vh;
         }
-        .control-panel {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            z-index: 1000;
-            background: white;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-        .brush-size {
-            width: 100px;
-            margin: 5px 0;
-        }
-        .button {
-            margin: 5px;
-            padding: 5px 10px;
-            cursor: pointer;
-            background: #f0f0f0;
-            border: 1px solid #ccc;
-            border-radius: 3px;
-        }
-        .button:hover {
-            background: #e0e0e0;
-        }
-        .button.active {
-            background: #007bff;
-            color: white;
-        }
-        #cursor {
-            position: absolute;
-            border: 2px solid red;
-            border-radius: 50%;
-            pointer-events: none;
-            z-index: 1000;
-            display: none;
-        }
     </style>
 </head>
 <body>
-    <!-- Previous HTML structure remains the same -->
-    <div class="control-panel">
-        <div>
-            <button id="gm-toggle" class="button">GM Mode: OFF</button>
-        </div>
-        <div>
-            <button id="reveal-toggle" class="button">Reveal Mode</button>
-            <button id="erase-toggle" class="button">Erase Mode</button>
-        </div>
-        <div>
-            <label>Brush Size: <span id="brush-size-display">20</span></label>
-            <input type="range" id="brush-size" class="brush-size" min="10" max="100" value="20">
-        </div>
-        <div>
-            <button id="save-map" class="button">Save Map</button>
-            <button id="clear-map" class="button">Clear All</button>
-        </div>
-    </div>
-
-    <div id="cursor"></div>
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -98,171 +40,6 @@
         const mapImage = L.imageOverlay('assets/ravenland-map.jpg', mapBounds).addTo(map);
         map.fitBounds(mapBounds);
         map.setView([mapHeight / 2, mapWidth / 2], 0);
-
-        // Canvas setup with offscreen buffer for better performance
-        const canvas = document.createElement('canvas');
-        canvas.width = mapWidth;
-        canvas.height = mapHeight;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-        const canvasLayer = L.imageOverlay(canvas, mapBounds).addTo(map);
-
-        // UI elements
-        const gmToggle = document.getElementById('gm-toggle');
-        const revealToggle = document.getElementById('reveal-toggle');
-        const eraseToggle = document.getElementById('erase-toggle');
-        const brushSize = document.getElementById('brush-size');
-        const brushSizeDisplay = document.getElementById('brush-size-display');
-        const cursor = document.getElementById('cursor');
-        const saveMapBtn = document.getElementById('save-map');
-        const clearMapBtn = document.getElementById('clear-map');
-
-        // State
-        let isGMMode = false;
-        let isDrawing = false;
-        let currentTool = 'reveal';
-        let lastDrawTime = 0;
-        const drawThrottle = 16; // ~60fps
-
-        // Initialize fog
-        function initializeFog() {
-            ctx.fillStyle = 'black';
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.fillRect(0, 0, mapWidth, mapHeight);
-            updateCanvasLayer();
-        }
-        initializeFog();
-
-        // Load saved state
-        function loadSavedState() {
-            const savedMap = localStorage.getItem('rpgMapState');
-            if (savedMap) {
-                const img = new Image();
-                img.onload = function() {
-                    ctx.drawImage(img, 0, 0);
-                    updateCanvasLayer();
-                };
-                img.src = savedMap;
-            }
-        }
-        loadSavedState();
-
-        // Brush size calculations
-        function getScaledBrushSize() {
-            const baseSize = parseInt(brushSize.value);
-            const zoomScale = map.getZoomScale(map.getZoom());
-            return baseSize * zoomScale; // Scale the brush size based on the zoom level
-        }
-
-        function updateBrushSize() {
-            const size = parseInt(brushSize.value);
-            brushSizeDisplay.textContent = size;
-            const scaledSize = getScaledBrushSize();
-            cursor.style.width = scaledSize + 'px';
-            cursor.style.height = scaledSize + 'px';
-        }
-
-        function updateCursor(e) {
-            const size = getScaledBrushSize();
-            cursor.style.left = (e.clientX - size / 2) + 'px';
-            cursor.style.top = (e.clientY - size / 2) + 'px';
-        }
-
-        // Optimized drawing function
-        function draw(e) {
-            if (!isGMMode) return;
-
-            const currentTime = performance.now();
-            if (currentTime - lastDrawTime < drawThrottle) return;
-            lastDrawTime = currentTime;
-
-            const point = map.mouseEventToLatLng(e);
-            const x = (point.lng / mapWidth) * canvas.width;
-            const y = canvas.height - (point.lat / mapHeight) * canvas.height;
-
-            const scaledSize = getScaledBrushSize() * (canvas.width / map.getContainer().clientWidth);
-
-            ctx.beginPath();
-            ctx.arc(x, y, scaledSize, 0, Math.PI * 2);
-
-            if (currentTool === 'reveal') {
-                ctx.globalCompositeOperation = 'destination-out';
-            } else {
-                ctx.globalCompositeOperation = 'source-over';
-                ctx.fillStyle = 'black';
-            }
-
-            ctx.fill();
-
-            // Use requestAnimationFrame for smoother updates
-            requestAnimationFrame(updateCanvasLayer);
-        }
-
-        function updateCanvasLayer() {
-            canvasLayer.setUrl(canvas.toDataURL());
-        }
-
-// Event listeners with performance optimizations
-        let drawRequest;
-        
-        map.on('mousemove', (e) => {
-            if (isGMMode) {
-                updateCursor(e.originalEvent);
-                if (isDrawing) {
-                    cancelAnimationFrame(drawRequest);
-                    drawRequest = requestAnimationFrame(() => draw(e.originalEvent));
-                }
-            }
-        });
-
-        map.on('mousedown', (e) => {
-            if (isGMMode) {
-                isDrawing = true;
-                draw(e.originalEvent);
-            }
-        });
-
-        map.on('mouseup', () => isDrawing = false);
-        map.on('mouseout', () => {
-            isDrawing = false;
-            cursor.style.display = 'none';
-        });
-        map.on('mouseover', () => {
-            if (isGMMode) cursor.style.display = 'block';
-        });
-        map.on('zoom', updateBrushSize);
-
-        gmToggle.addEventListener('click', () => {
-            isGMMode = !isGMMode;
-            gmToggle.textContent = 'GM Mode: ' + (isGMMode ? 'ON' : 'OFF');
-            gmToggle.classList.toggle('active');
-            cursor.style.display = isGMMode ? 'block' : 'none';
-        });
-
-        revealToggle.addEventListener('click', () => {
-            currentTool = 'reveal';
-            revealToggle.classList.add('active');
-            eraseToggle.classList.remove('active');
-        });
-
-        eraseToggle.addEventListener('click', () => {
-            currentTool = 'erase';
-            eraseToggle.classList.add('active');
-            revealToggle.classList.remove('active');
-        });
-
-        brushSize.addEventListener('input', updateBrushSize);
-
-        saveMapBtn.addEventListener('click', () => {
-            const mapData = canvas.toDataURL();
-            localStorage.setItem('rpgMapState', mapData);
-        });
-
-        clearMapBtn.addEventListener('click', () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            initializeFog();
-            updateCanvasLayer();
-        });
     </script>
 </body>
 </html>
