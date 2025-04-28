@@ -55,6 +55,10 @@
         const mapWidth = 8563;
         const mapHeight = 6201;
         const mapBounds = [[0, 0], [mapHeight, mapWidth]];
+        
+        // Base icon size at zoom level 0 (1:1 scale)
+        const BASE_ICON_SIZE = 32; // pixels for 1:1 scale
+        const BASE_ZOOM = 0;
     
         const map = L.map('map', {
             crs: L.CRS.Simple,
@@ -67,49 +71,90 @@
     
         const mapImage = L.imageOverlay('assets/ravenland-map-90.webp', mapBounds).addTo(map);
         map.fitBounds(mapBounds);
-        map.setView([mapHeight / 2, mapWidth / 2], 0);
+        map.setView([mapHeight / 2, mapWidth / 2], BASE_ZOOM);
+    
+        // Function to calculate scaled icon size based on current zoom
+        function getScaledIconSize(currentZoom) {
+            const scaleFactor = Math.pow(2, BASE_ZOOM - currentZoom);
+            const scaledSize = BASE_ICON_SIZE * scaleFactor;
+            return [scaledSize, scaledSize];
+        }
+    
+        // Function to create or update scaled icons
+        function createScaledIcon(iconUrl, currentZoom) {
+            const size = getScaledIconSize(currentZoom);
+            return L.icon({
+                iconUrl: iconUrl,
+                iconSize: size,
+                iconAnchor: [size[0]/2, size[1]/2], // Center anchor
+                popupAnchor: [0, -size[1]/2] // Above marker
+            });
+        }
+    
+        // Track all markers for resizing
+        const markers = [];
+        let currentIcons = {};
     
         // Load locations and icons from JSON file
         fetch('data/locations.json')
             .then(response => response.json())
             .then(data => {
-                // Create icon cache
-                const iconCache = {};
-                
-                // Process icons from config
-                for (const [type, url] of Object.entries(data.icons)) {
-                    iconCache[type] = L.icon({
-                        iconUrl: url,
-                        ...data.iconDefaults
-                    });
+                // Initialize icons at current zoom
+                function initIcons(zoom) {
+                    currentIcons = {};
+                    for (const [type, url] of Object.entries(data.icons)) {
+                        currentIcons[type] = createScaledIcon(url, zoom);
+                    }
                 }
     
                 // Add locations to map
-                data.locations.forEach(location => {
-                    const icon = iconCache[location.type] || iconCache['default'];
-                    
-                    const marker = L.marker(
-                        [location.coords[1], location.coords[0]], // Note: Leaflet uses [lat,lng] which maps to [y,x]
-                        { icon: icon }
-                    ).addTo(map);
-                    
-                    // Add popup content
-                    let popupContent = `<div class="location-title">${location.name}</div>`;
-                    if (location.description) {
-                        popupContent += `<div class="location-description">${location.description}</div>`;
-                    }
-                    if (location.publicNotes) {
-                        popupContent += `<div class="public-notes"><em>${location.publicNotes}</em></div>`;
-                    }
-                    if (location.gmNotes) {
-                        popupContent += `<div class="gm-notes"><strong>GM Notes:</strong> ${location.gmNotes}</div>`;
-                    }
-                    
-                    marker.bindPopup(popupContent, {
-                        className: 'map-popup',
-                        maxWidth: 300
+                function addLocations() {
+                    data.locations.forEach(location => {
+                        const icon = currentIcons[location.type] || currentIcons['default'];
+                        
+                        const marker = L.marker(
+                            [location.coords[1], location.coords[0]],
+                            { icon: icon }
+                        ).addTo(map);
+                        
+                        // Add popup content
+                        let popupContent = `<div class="location-title">${location.name}</div>`;
+                        if (location.description) {
+                            popupContent += `<div class="location-description">${location.description}</div>`;
+                        }
+                        if (location.publicNotes) {
+                            popupContent += `<div class="public-notes"><em>${location.publicNotes}</em></div>`;
+                        }
+                        if (location.gmNotes) {
+                            popupContent += `<div class="gm-notes"><strong>GM Notes:</strong> ${location.gmNotes}</div>`;
+                        }
+                        
+                        marker.bindPopup(popupContent, {
+                            className: 'map-popup',
+                            maxWidth: 300
+                        });
+    
+                        markers.push(marker);
                     });
-                });
+                }
+    
+                // Update all icons when zoom changes
+                function updateIconSizes() {
+                    const zoom = map.getZoom();
+                    initIcons(zoom);
+                    markers.forEach(marker => {
+                        const locationType = marker.options.icon.options.iconUrl.includes('village') ? 'village' : 
+                                            marker.options.icon.options.iconUrl.includes('adventure-site') ? 'adventure-site' : 'default';
+                        marker.setIcon(currentIcons[locationType]);
+                    });
+                }
+    
+                // Initial setup
+                initIcons(BASE_ZOOM);
+                addLocations();
+    
+                // Update icons on zoom
+                map.on('zoomend', updateIconSizes);
             })
             .catch(error => {
                 console.error('Error loading locations:', error);
