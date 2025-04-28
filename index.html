@@ -73,9 +73,9 @@
         map.fitBounds(mapBounds);
         map.setView([mapHeight / 2, mapWidth / 2], BASE_ZOOM);
     
-        // Function to calculate scaled icon size based on current zoom
+        // CORRECTED scaling function (inverted the calculation)
         function getScaledIconSize(currentZoom) {
-            const scaleFactor = Math.pow(2, BASE_ZOOM - currentZoom);
+            const scaleFactor = Math.pow(2, currentZoom - BASE_ZOOM);
             const scaledSize = BASE_ICON_SIZE * scaleFactor;
             return [scaledSize, scaledSize];
         }
