@@ -73,25 +73,34 @@
         map.fitBounds(mapBounds);
         map.setView([mapHeight / 2, mapWidth / 2], BASE_ZOOM);
     
-        // CORRECTED scaling function (inverted the calculation)
-        function getScaledIconSize(currentZoom) {
-            const scaleFactor = Math.pow(2, currentZoom - BASE_ZOOM);
+        // Function to calculate interpolated zoom during animation
+        function getInterpolatedZoom() {
+            // Leaflet doesn't expose the exact intermediate zoom during animation,
+            // but we can approximate it using the map's transform
+            const zoom = map.getZoom();
+            const scale = map.getZoomScale(zoom, map._animateToZoom || zoom);
+            return zoom + Math.log2(scale);
+        }
+    
+        // Function to create scaled icons
+        function createScaledIcon(iconUrl, targetZoom) {
+            const size = getScaledIconSize(targetZoom);
+            return L.icon({
+                iconUrl: iconUrl,
+                iconSize: size,
+                iconAnchor: [size[0]/2, size[1]/2],
+                popupAnchor: [0, -size[1]/2]
+            });
+        }
+    
+        // Calculate size based on zoom level
+        function getScaledIconSize(zoom) {
+            const scaleFactor = Math.pow(2, zoom - BASE_ZOOM);
             const scaledSize = BASE_ICON_SIZE * scaleFactor;
             return [scaledSize, scaledSize];
         }
     
-        // Function to create or update scaled icons
-        function createScaledIcon(iconUrl, currentZoom) {
-            const size = getScaledIconSize(currentZoom);
-            return L.icon({
-                iconUrl: iconUrl,
-                iconSize: size,
-                iconAnchor: [size[0]/2, size[1]/2], // Center anchor
-                popupAnchor: [0, -size[1]/2] // Above marker
-            });
-        }
-    
-        // Track all markers for resizing
+        // Track all markers
         const markers = [];
         let currentIcons = {};
     
@@ -99,7 +108,7 @@
         fetch('data/locations.json')
             .then(response => response.json())
             .then(data => {
-                // Initialize icons at current zoom
+                // Initialize icons
                 function initIcons(zoom) {
                     currentIcons = {};
                     for (const [type, url] of Object.entries(data.icons)) {
@@ -117,17 +126,11 @@
                             { icon: icon }
                         ).addTo(map);
                         
-                        // Add popup content
+                        // Popup content remains the same...
                         let popupContent = `<div class="location-title">${location.name}</div>`;
-                        if (location.description) {
-                            popupContent += `<div class="location-description">${location.description}</div>`;
-                        }
-                        if (location.publicNotes) {
-                            popupContent += `<div class="public-notes"><em>${location.publicNotes}</em></div>`;
-                        }
-                        if (location.gmNotes) {
-                            popupContent += `<div class="gm-notes"><strong>GM Notes:</strong> ${location.gmNotes}</div>`;
-                        }
+                        if (location.description) popupContent += `<div class="location-description">${location.description}</div>`;
+                        if (location.publicNotes) popupContent += `<div class="public-notes"><em>${location.publicNotes}</em></div>`;
+                        if (location.gmNotes) popupContent += `<div class="gm-notes"><strong>GM Notes:</strong> ${location.gmNotes}</div>`;
                         
                         marker.bindPopup(popupContent, {
                             className: 'map-popup',
@@ -138,23 +141,66 @@
                     });
                 }
     
-                // Update all icons when zoom changes
-                function updateIconSizes() {
-                    const zoom = map.getZoom();
-                    initIcons(zoom);
-                    markers.forEach(marker => {
-                        const locationType = marker.options.icon.options.iconUrl.includes('village') ? 'village' : 
-                                            marker.options.icon.options.iconUrl.includes('adventure-site') ? 'adventure-site' : 'default';
-                        marker.setIcon(currentIcons[locationType]);
-                    });
+                // Smooth icon scaling during zoom
+                let zoomAnimationFrame;
+                function smoothZoomIcons() {
+                    // Cancel any pending animation frame
+                    if (zoomAnimationFrame) {
+                        cancelAnimationFrame(zoomAnimationFrame);
+                    }
+                    
+                    const updateIcons = () => {
+                        const currentZoom = getInterpolatedZoom();
+                        markers.forEach(marker => {
+                            const icon = marker.options.icon;
+                            const newSize = getScaledIconSize(currentZoom);
+                            
+                            // Only update if size changed (for performance)
+                            if (icon.options.iconSize[0] !== newSize[0]) {
+                                const newIcon = L.icon({
+                                    iconUrl: icon.options.iconUrl,
+                                    iconSize: newSize,
+                                    iconAnchor: [newSize[0]/2, newSize[1]/2],
+                                    popupAnchor: [0, -newSize[1]/2]
+                                });
+                                marker.setIcon(newIcon);
+                            }
+                        });
+                        
+                        // Continue animating until zoom ends
+                        if (map._animatingZoom) {
+                            zoomAnimationFrame = requestAnimationFrame(updateIcons);
+                        }
+                    };
+                    
+                    updateIcons();
                 }
     
                 // Initial setup
                 initIcons(BASE_ZOOM);
                 addLocations();
     
-                // Update icons on zoom
-                map.on('zoomend', updateIconSizes);
+                // Set up smooth zoom handling
+                map.on('zoomstart', smoothZoomIcons);
+                map.on('zoom', smoothZoomIcons);
+                map.on('zoomend', () => {
+                    if (zoomAnimationFrame) {
+                        cancelAnimationFrame(zoomAnimationFrame);
+                    }
+                    // Final sync to ensure perfect alignment
+                    const finalZoom = map.getZoom();
+                    markers.forEach(marker => {
+                        const icon = marker.options.icon;
+                        const newSize = getScaledIconSize(finalZoom);
+                        const newIcon = L.icon({
+                            iconUrl: icon.options.iconUrl,
+                            iconSize: newSize,
+                            iconAnchor: [newSize[0]/2, newSize[1]/2],
+                            popupAnchor: [0, -newSize[1]/2]
+                        });
+                        marker.setIcon(newIcon);
+                    });
+                });
             })
             .catch(error => {
                 console.error('Error loading locations:', error);
