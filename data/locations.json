@@ -1,0 +1,32 @@
+{
+    "iconDefaults": {
+        "iconSize": [32, 32],
+        "iconAnchor": [16, 16],
+        "popupAnchor": [0, -16]
+    },
+    "icons": {
+        "village": "assets/icons/village_03.webp",
+        "adventure-site": "assets/icons/village_02.webp",
+        "default": "assets/icons/village_01.webp"
+    },
+    "locations": [
+        {
+            "id": "village1",
+            "name": "Elderbrook",
+            "type": "village",
+            "coords": [3200, 4500],
+            "description": "A peaceful riverside village known for its apple orchards.",
+            "publicNotes": "Friendly locals, good place to rest",
+            "gmNotes": "Secret cult operating in basement of the tavern"
+        },
+        {
+            "id": "site1",
+            "name": "The Bleeding Tower",
+            "type": "adventure-site",
+            "coords": [2800, 5100],
+            "description": "A crumbling stone tower that weeps blood-red sap.",
+            "publicNotes": "Approach with caution",
+            "gmNotes": "Contains the Amulet of Zorath - DC 15 Perception to find"
+        }
+    ]
+}

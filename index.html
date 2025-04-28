@@ -10,13 +10,41 @@
             margin: 0;
             padding: 0;
             height: 100%;
-            font-family: Arial, sans-serif;
+            font-family: 'IM Fell English', Arial, serif;
         }
         #map {
             width: 100%;
             height: 100vh;
         }
+        
+        /* Custom popup styling */
+        .map-popup .leaflet-popup-content-wrapper {
+            background: rgba(235, 228, 213, 0.9);
+            border-radius: 0;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+        }
+        .map-popup .leaflet-popup-content {
+            margin: 12px;
+            color: #3a3226;
+        }
+        .map-popup .leaflet-popup-tip {
+            background: rgba(235, 228, 213, 0.9);
+        }
+        .location-title {
+            font-family: 'IM Fell English', serif;
+            font-size: 1.2em;
+            margin-bottom: 8px;
+            color: #5a3921;
+        }
+        .gm-notes {
+            background: #f3e9d2;
+            padding: 8px;
+            margin-top: 8px;
+            border-left: 3px solid #8b5a2b;
+        }
     </style>
+    <!-- Add IM Fell English font -->
+    <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English&display=swap" rel="stylesheet">
 </head>
 <body>
     <div id="map"></div>
@@ -27,7 +55,7 @@
         const mapWidth = 8563;
         const mapHeight = 6201;
         const mapBounds = [[0, 0], [mapHeight, mapWidth]];
-
+    
         const map = L.map('map', {
             crs: L.CRS.Simple,
             minZoom: -2,
@@ -36,10 +64,56 @@
             maxBounds: mapBounds,
             maxBoundsViscosity: 1.0
         });
-
+    
         const mapImage = L.imageOverlay('assets/ravenland-map-90.webp', mapBounds).addTo(map);
         map.fitBounds(mapBounds);
         map.setView([mapHeight / 2, mapWidth / 2], 0);
+    
+        // Load locations and icons from JSON file
+        fetch('data/locations.json')
+            .then(response => response.json())
+            .then(data => {
+                // Create icon cache
+                const iconCache = {};
+                
+                // Process icons from config
+                for (const [type, url] of Object.entries(data.icons)) {
+                    iconCache[type] = L.icon({
+                        iconUrl: url,
+                        ...data.iconDefaults
+                    });
+                }
+    
+                // Add locations to map
+                data.locations.forEach(location => {
+                    const icon = iconCache[location.type] || iconCache['default'];
+                    
+                    const marker = L.marker(
+                        [location.coords[1], location.coords[0]], // Note: Leaflet uses [lat,lng] which maps to [y,x]
+                        { icon: icon }
+                    ).addTo(map);
+                    
+                    // Add popup content
+                    let popupContent = `<div class="location-title">${location.name}</div>`;
+                    if (location.description) {
+                        popupContent += `<div class="location-description">${location.description}</div>`;
+                    }
+                    if (location.publicNotes) {
+                        popupContent += `<div class="public-notes"><em>${location.publicNotes}</em></div>`;
+                    }
+                    if (location.gmNotes) {
+                        popupContent += `<div class="gm-notes"><strong>GM Notes:</strong> ${location.gmNotes}</div>`;
+                    }
+                    
+                    marker.bindPopup(popupContent, {
+                        className: 'map-popup',
+                        maxWidth: 300
+                    });
+                });
+            })
+            .catch(error => {
+                console.error('Error loading locations:', error);
+            });
     </script>
 </body>
 </html>
